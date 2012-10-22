@@ -5,7 +5,6 @@ package com.android;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
