@@ -128,11 +128,13 @@ public class ColorSVM {
 	private void forkReadingsToSvmFile(int state, int foodType, int [] readings, FileWriter vFile) {
 		String readingSvm = "";
 		String readingDiff = "";
-		int labelCount = COLOR_READING_LENGTH+1;
-		readingSvm += foodType;
+		String readingRank = "";
+		int labelCount = COLOR_READING_LENGTH+2;
+		readingRank += foodType;
 		
+		readingRank +=" " + "1:"+ addFeature(readings);
 		for(int i=0; i<COLOR_READING_LENGTH;i++) {
-			readingSvm += " " + (i+1) + ":" + readings[i];
+			readingSvm += " " + (i+2) + ":" + readings[i];
 			for(int j=i+1; j<COLOR_READING_LENGTH;j++) {
 				readingDiff += " " + labelCount + ":" + (readings[i] - readings[j]);
 				labelCount++;
@@ -140,12 +142,12 @@ public class ColorSVM {
     	}
 		
 		try {
-			vFile.write(readingSvm + readingDiff + "\n");
+			vFile.write(readingRank + readingSvm + readingDiff + "\n");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 
-    	Log.i("MESSAGE_READ", readingSvm + readingDiff + " --- " + state);
+    	Log.i("MESSAGE_READ", readingRank + readingSvm + readingDiff + " --- " + state);
 		
 		return;
 	}
@@ -156,10 +158,11 @@ public class ColorSVM {
 		Iterator<int[]> iter = readingsQueue.iterator();
 		while(iter.hasNext())
 		{
-			int resulCount = 4;
+			int resulCount = 5;
 			int[] readings = iter.next();
+			results[count][0] = addFeature(readings);
 			for(int i=0; i<COLOR_READING_LENGTH;i++) {
-				results[count][i] = readings[i];
+				results[count][i+1] = readings[i-1];
 				for(int j=i+1; j<COLOR_READING_LENGTH;j++) {
 					results[count][resulCount] = (readings[i] - readings[j]);
 					resulCount++;
@@ -170,6 +173,22 @@ public class ColorSVM {
 		return results;
 	}
 	
+	public int addFeature(int[] readings){
+		if(readings[0]>readings[1] && readings[1]>readings[2])
+			return 1;
+		else if(readings[0]>=readings[2] && readings[2]>=readings[1])
+			return 2;
+		else if(readings[1]>readings[0] && readings[0]>=readings[2])
+			return 3;
+		else if(readings[2]>readings[0] && readings[0]>=readings[1])
+			return 4;
+		else if(readings[1]>=readings[2] && readings[2]>readings[0])
+			return 5;
+		else if(readings[2]>readings[1] && readings[1]>=readings[0])
+			return 6;
+		else 
+			return 0;
+	}
 	
 	public void train() {
     	// Svm training
