@@ -2,34 +2,40 @@ package com.android;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Queue;
 
+import android.graphics.Typeface;
+import android.os.CountDownTimer;
 import android.os.Environment;
 import android.util.Log;
+import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 public class ColorSVM {
-	
+
 	public static final int COLOR_READING_LENGTH = 4;
 	public static final int COLOR_TRAINING_WINDOW_LENGTH = 10;
 	public static final int COLOR_SENSING_WINDOW_LENGTH = 5;
 	public static final int COLOR_READING_STDV_THRESHOLD = 15;
 	SensingFork sensingFork = null;
 	FileWriter trainFile = null;
-	
+	public static int whatFood;
+
 	private boolean trainCompleted = false;
-	
+
 	Queue<int[]> readingsQueue=new LinkedList<int[]>();
 	int[] colorReadingsSum = new int[COLOR_READING_LENGTH];
 	double[] colorReadingsAvg = new double[COLOR_READING_LENGTH];
-	
+
 	public ColorSVM(SensingFork sensingFork, FileWriter vFile) {
 		this.sensingFork = sensingFork;
 		this.trainFile = vFile;
 	}
-	
+
 	public void fileClose() {
 		try {
 			trainFile.close();
@@ -37,7 +43,7 @@ public class ColorSVM {
 			e.printStackTrace();
 		}
 	}
-	
+
 	public boolean getTrainCompleted() {
 		return trainCompleted;
 	}
@@ -48,21 +54,21 @@ public class ColorSVM {
 			bufferClean();
 			return false;
 		}
-		
+
 		for(int i=0; i<COLOR_READING_LENGTH; i++) {
 			colorReadingsSum[i] += readings[i];
 		}
-		
+
 		readingsQueue.add(readings.clone());
-		
+
 		// Calculate standard deviations 
 		double[] stdvs = new double[COLOR_READING_LENGTH];
 		if(readingsQueue.size() >= windowLength) {
-			
+
 			for(int i=0; i<COLOR_READING_LENGTH; i++) {
 				colorReadingsAvg[i] = colorReadingsSum[i]/windowLength;
 			}
-			
+
 			Iterator<int[]> iter = readingsQueue.iterator();
 			while(iter.hasNext())
 	        {
@@ -70,23 +76,23 @@ public class ColorSVM {
 				for(int i=0; i<COLOR_READING_LENGTH; i++) {
 					stdvs[i] += Math.pow(colorReadingsAvg[i]-iteratorValues[i], 2);
 				}
-	            
+
 	        }
-			
+
 			if((Math.sqrt(stdvs[0]/windowLength)<COLOR_READING_STDV_THRESHOLD)&&
 			   (Math.sqrt(stdvs[1]/windowLength)<COLOR_READING_STDV_THRESHOLD)&&
 			   (Math.sqrt(stdvs[2]/windowLength)<COLOR_READING_STDV_THRESHOLD)&&
 			   (Math.sqrt(stdvs[3]/windowLength)<COLOR_READING_STDV_THRESHOLD)) {
-				
+
 				if(isTrain) {
 					iter = readingsQueue.iterator();
 					while(iter.hasNext())
 			        {
 						int[] iteratorValues = iter.next();
 						forkReadingsToSvmFile(state, foodType, iteratorValues, trainFile);
-			            
+
 			        }
-					
+
 					Log.i("CheckingQ*", readingsQueue.size()+ " " + Math.sqrt(stdvs[0]/windowLength) + " " 
 							+ Math.sqrt(stdvs[1]/windowLength)+ " " + Math.sqrt(stdvs[2]/windowLength) + " " 
 							+ Math.sqrt(stdvs[3]/windowLength));
@@ -95,11 +101,11 @@ public class ColorSVM {
 					Log.i("TestingQ*", readingsQueue.size()+ " " + Math.sqrt(stdvs[0]/windowLength) + " " 
 							+ Math.sqrt(stdvs[1]/windowLength)+ " " + Math.sqrt(stdvs[2]/windowLength) + " " 
 							+ Math.sqrt(stdvs[3]/windowLength));
-					
-					classify(readingsClassifyParser(readingsQueue));
-					
+
+					classify(readingsClassifyParser(readingsQueue), foodType);
+
 				}
-				
+
 				bufferClean();
 				return true;
 			}
@@ -107,61 +113,67 @@ public class ColorSVM {
 				Log.i("CheckingQ", readingsQueue.size()+ " " + Math.sqrt(stdvs[0]/windowLength) + " " 
 					+ Math.sqrt(stdvs[1]/windowLength)+ " " + Math.sqrt(stdvs[2]/windowLength) + " " 
 					+ Math.sqrt(stdvs[3]/windowLength));
-			
+
 			// Remove head of queue
 			int[] head = readingsQueue.poll();
 			for(int i=0; i<COLOR_READING_LENGTH; i++) {
 				colorReadingsSum[i] -= head[i];
 			}
-			
+
 		}
-		
+
 		return false;
 	}
-	
+
 	public void bufferClean() {
 		readingsQueue.clear();
 		colorReadingsSum = new int[COLOR_READING_LENGTH]; 
 		colorReadingsAvg = new double[COLOR_READING_LENGTH];
 	}
-	
+
 	private void forkReadingsToSvmFile(int state, int foodType, int [] readings, FileWriter vFile) {
 		String readingSvm = "";
 		String readingDiff = "";
-		int labelCount = COLOR_READING_LENGTH+1;
-		readingSvm += foodType;
-		
+		String readingRank = "";
+		int labelCount = COLOR_READING_LENGTH+2;
+		readingRank += foodType;
+
+		readingRank +=" " + "1:"+ addFeature(readings);
 		for(int i=0; i<COLOR_READING_LENGTH;i++) {
-			readingSvm += " " + (i+1) + ":" + readings[i];
+			readingSvm += " " + (i+2) + ":" + readings[i];
 			for(int j=i+1; j<COLOR_READING_LENGTH;j++) {
 				readingDiff += " " + labelCount + ":" + (readings[i] - readings[j]);
 				labelCount++;
 			}
     	}
-		
+
 		try {
-			vFile.write(readingSvm + readingDiff + "\n");
+			vFile.write(readingRank + readingSvm + readingDiff + "\n");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 
-    	Log.i("MESSAGE_READ", readingSvm + readingDiff + " --- " + state);
-		
+    	Log.i("MESSAGE_READ", readingRank + readingSvm + readingDiff + " --- " + state);
+
 		return;
 	}
-	
+
 	float[][] readingsClassifyParser(Queue<int[]> readingsQueue){
-		float[][] results = new float[5][10];
+		float[][] results = new float[5][11];
 		int count = 0;
 		Iterator<int[]> iter = readingsQueue.iterator();
 		while(iter.hasNext())
 		{
-			int resulCount = 4;
+			int resulCount = 5;
 			int[] readings = iter.next();
+			results[count][0] = addFeature(readings);
+			Log.i("MESSAGE_READ", results[count][0] + "");
 			for(int i=0; i<COLOR_READING_LENGTH;i++) {
-				results[count][i] = readings[i];
+				results[count][i+1] = readings[i];
+				Log.i("MESSAGE_READ1", results[count][i+1] + "");
 				for(int j=i+1; j<COLOR_READING_LENGTH;j++) {
 					results[count][resulCount] = (readings[i] - readings[j]);
+					Log.i("MESSAGE_READ2", results[count][resulCount] + "");
 					resulCount++;
 				}
 			}
@@ -169,8 +181,24 @@ public class ColorSVM {
 	    }
 		return results;
 	}
-	
-	
+
+	public int addFeature(int[] readings){
+		if(readings[0]>=readings[1] && readings[1]>=readings[2])
+			return 1;
+		else if(readings[0]>=readings[2] && readings[2]>readings[1])
+			return 2;
+		else if(readings[1]>readings[0] && readings[0]>=readings[2])
+			return 3;
+		else if(readings[2]>readings[0] && readings[0]>=readings[1])
+			return 4;
+		else if(readings[1]>=readings[2] && readings[2]>readings[0])
+			return 5;
+		else if(readings[2]>readings[1] && readings[1]>readings[0])
+			return 6;
+		else 
+			return 0;
+	}
+
 	public void train() {
     	// Svm training
     	int kernelType = 1; // polynomial function
@@ -188,8 +216,8 @@ public class ColorSVM {
     	trainCompleted = true;
     	//
     }
-	
-	public int[] classify(float[][] values) {
+
+	public int[] classify(float[][] values, int foodType) {
         // Svm classification
         /*float[][] values = {
         				{44, 24, 18, 31, 20, 26, 13, 6, -7, -13 },
@@ -198,28 +226,56 @@ public class ColorSVM {
                         {54, 29, 27, 49, 25, 27, 5, 2, -20, -22 },
                         {343, 283, 169, 360, 60, 174, -17, 114, -77, -191},
         };*/
-		
+
         int[][] indices = {
-        				{1,2,3,4,5,6,7,8,9,10},
-        				{1,2,3,4,5,6,7,8,9,10},
-        				{1,2,3,4,5,6,7,8,9,10},
-        				{1,2,3,4,5,6,7,8,9,10},
-        				{1,2,3,4,5,6,7,8,9,10}
+        				{1,2,3,4,5,6,7,8,9,10,11},
+        				{1,2,3,4,5,6,7,8,9,10,11},
+        				{1,2,3,4,5,6,7,8,9,10,11},
+        				{1,2,3,4,5,6,7,8,9,10,11},
+        				{1,2,3,4,5,6,7,8,9,10,11}
         };
         int[] groundTruth = {1,2,3,4,5};
         int[] labels = new int[5];
         double[] probs = new double[5];
         int isProb = 0; // Not probability prediction
         String modelFileLoc = Environment.getExternalStorageDirectory()+"/SensingFork/model";
+        int[] count = new int[foodType-1];
 
         if (callSVM(values, indices, groundTruth, isProb, modelFileLoc, labels, probs) != 0) {
                 Log.d(sensingFork. TAG, "Classification is incorrect");
         }
         else {
         	String m = "";
-        	for (int l : labels)
+        	for (int l : labels){ 
         		m += l + ", ";
-        	Toast.makeText(sensingFork, "Classification is done, the result is " + m, 3000).show();
+        		count[l-1]++;
+        	}
+        	int max = 0;
+        	
+        	for (int i=0; i< count.length-1;i++){
+        		if(count[i]<count[i+1]){
+        			max = i+1;
+        		}
+        	}
+       
+        	Log.i("answer", max+" "+count[max]);
+        	
+        	TextView sensingText = (TextView)sensingFork.findViewById(R.id.sensing);
+        	sensingText.setVisibility(View.VISIBLE);
+        	sensingText.setText("Food "+ (max+1) );
+        	sensingText.setTypeface(Typeface.createFromAsset(sensingFork.getAssets(), "fonts/SCHOOLA.TTF"));
+        	new CountDownTimer(2000,1000){
+        		public void onFinish(){
+                	TextView sensingText = (TextView)sensingFork.findViewById(R.id.sensing);
+        			sensingText.setVisibility(View.INVISIBLE);
+        		}
+        		
+        		public void onTick(long millisUntilFinished){
+    				
+    			}
+        	}.start();
+        	
+        	//Toast.makeText(sensingFork, "Classification is done, the result is food" + m, 3000).show();
         }
         return labels;
     }
