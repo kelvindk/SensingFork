@@ -297,7 +297,7 @@ public class SensingFork extends Activity {
             		else if(state < 2) {
             			sensingNoFoodCount++;
             			colorSVM.bufferClean();
-            			if(sensingNoFoodCount >= 5) {
+            			if(sensingNoFoodCount >= 4) {
             				isFoodSensed = false;
             			}
             		}
